@@ -1,0 +1,22 @@
+{
+  "name": "finops-guardian",
+  "version": "1.0.0",
+  "description": "Detects infrastructure-expensive code patterns before they reach production and projects the actual dollar cost at scale. Classifies every finding by its cost growth curve (constant through runaway/unbounded) and outputs the exact rewrite that flattens it.",
+  "author": {
+    "name": "Md. Sowad Al-Mughni",
+    "email": "sowad.al.mughni@gmail.com",
+    "url": "https://www.kitalonlabs.com"
+  },
+  "homepage": "https://github.com/sowadalmughni/finops-guardian",
+  "repository": "https://github.com/sowadalmughni/finops-guardian",
+  "license": "MIT",
+  "keywords": [
+    "finops",
+    "cost-optimization",
+    "cloud-cost-optimization",
+    "n-plus-one",
+    "infrastructure-cost",
+    "devops",
+    "vibe-coding"
+  ]
+}

@@ -1,0 +1,4 @@
+# Fixture: Pattern 5 (lazy auto-scaling) — no concurrency ceiling set.
+functions:
+  processWebhook:
+    handler: handler.processWebhook

@@ -1,0 +1,52 @@
+[
+  {
+    "query": "can you review this PR for cost impact before I merge it",
+    "should_trigger": true
+  },
+  {
+    "query": "will this scale if we 10x our traffic next quarter",
+    "should_trigger": true
+  },
+  {
+    "query": "our AWS bill jumped from $800 to $4,200 last month and I have no idea why",
+    "should_trigger": true
+  },
+  {
+    "query": "check this codebase for infrastructure cost risk before we ship it",
+    "should_trigger": true
+  },
+  {
+    "query": "is this query going to blow up our database costs once we have real users",
+    "should_trigger": true
+  },
+  {
+    "query": "we keep hitting connection pool exhaustion in prod, can you check the code for the cause",
+    "should_trigger": true
+  },
+  {
+    "query": "estimate what this new feature will cost us in cloud spend once it's at scale",
+    "should_trigger": true
+  },
+  {
+    "query": "our agent keeps burning through the token budget, can you find where it's looping without a cap",
+    "should_trigger": true
+  },
+  {
+    "query": "can you review this PR and suggest better variable names",
+    "should_trigger": false,
+    "note": "near-miss: shares the 'review' verb but wants a style/naming pass, not a cost-risk check"
+  },
+  {
+    "query": "write unit tests for the checkout function in src/checkout.ts",
+    "should_trigger": false
+  },
+  {
+    "query": "audit our AWS spend for the last quarter and tell me which team is burning the most budget",
+    "should_trigger": false,
+    "note": "near-miss: shares the cost framing but is a billing/cost-center report across teams, not an inspection of code for cost-risk patterns"
+  },
+  {
+    "query": "refactor this component to use hooks instead of class syntax",
+    "should_trigger": false
+  }
+]

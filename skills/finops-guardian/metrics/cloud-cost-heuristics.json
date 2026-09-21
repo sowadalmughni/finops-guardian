@@ -1,0 +1,136 @@
+{
+  "_meta": {
+    "version": "1.0.0",
+    "description": "Directional unit cost heuristics and growth models for projecting the dollar impact of infrastructure-expensive code patterns. These are estimates for prioritization, not invoices — actual cost varies by provider, region, instance tier, and reserved capacity.",
+    "author": "Md. Sowad Al-Mughni",
+    "company": "Kitalon Labs",
+    "website": "https://www.kitalonlabs.com",
+    "homepage": "https://github.com/sowadalmughni/finops-guardian"
+  },
+
+  "unit_costs": {
+    "_note": "All figures are directional midpoints across common providers (AWS RDS, Supabase, Vercel, OpenAI, Anthropic) as of 2026. Adjust to the project's actual provider and tier before presenting a final number to a client.",
+    "database": {
+      "postgres_read_query":        { "low": 0.0000001, "mid": 0.0000005, "high": 0.000002, "unit": "USD per query", "note": "Highly dependent on instance tier and whether the query hits an index" },
+      "postgres_write_query":       { "low": 0.0000003, "mid": 0.000001,  "high": 0.000004, "unit": "USD per query" },
+      "connection_pool_exhaustion": { "low": 50,        "mid": 300,       "high": 1500,     "unit": "USD per incident (upgrade forced by pool exhaustion, or downtime cost)" }
+    },
+    "storage": {
+      "object_storage_gb_month":    { "low": 0.015, "mid": 0.023, "high": 0.030, "unit": "USD per GB-month (S3/equivalent standard tier)" },
+      "database_storage_gb_month":  { "low": 0.10,  "mid": 0.20,  "high": 0.40,  "unit": "USD per GB-month (managed Postgres)" },
+      "egress_per_gb":              { "low": 0.05,  "mid": 0.09,  "high": 0.15,  "unit": "USD per GB transferred out" }
+    },
+    "compute": {
+      "serverless_invocation":      { "low": 0.0000002, "mid": 0.0000004, "high": 0.0000008, "unit": "USD per invocation (base, excludes duration)" },
+      "serverless_gb_second":       { "low": 0.0000133, "mid": 0.0000167, "high": 0.0000250, "unit": "USD per GB-second of execution" },
+      "container_vcpu_hour":        { "low": 0.02,      "mid": 0.04,      "high": 0.08,      "unit": "USD per vCPU-hour" }
+    },
+    "llm_api": {
+      "gpt4_class_input_1k_tokens":    { "low": 0.002,  "mid": 0.005,  "high": 0.010,  "unit": "USD per 1,000 input tokens" },
+      "gpt4_class_output_1k_tokens":   { "low": 0.006,  "mid": 0.015,  "high": 0.030,  "unit": "USD per 1,000 output tokens" },
+      "claude_sonnet_class_input":     { "low": 0.003,  "mid": 0.003,  "high": 0.003,  "unit": "USD per 1,000 input tokens" },
+      "claude_sonnet_class_output":    { "low": 0.015,  "mid": 0.015,  "high": 0.015,  "unit": "USD per 1,000 output tokens" },
+      "embedding_1k_tokens":           { "low": 0.00002,"mid": 0.00010, "high": 0.00013,"unit": "USD per 1,000 tokens embedded" }
+    },
+    "third_party_api": {
+      "generic_paid_api_call":      { "low": 0.001, "mid": 0.01, "high": 0.10, "unit": "USD per call — varies enormously by vendor (SMS, enrichment, geocoding, payment processing)" }
+    }
+  },
+
+  "pattern_growth_models": {
+    "n1_query": {
+      "classification": "LINEAR to QUADRATIC+",
+      "formula": "1 parent query + N child queries, where N = rows in parent result set. If nested (N+1 inside another N+1), cost is O(n²).",
+      "cost_formula": "total_cost = (1 + N) * postgres_read_query.mid",
+      "scale_sensitivity": "Invisible below ~50 rows. Severe above 1,000 rows. Catastrophic (connection pool exhaustion) above 10,000 rows on default pool sizes.",
+      "documented_case": "$12,000/month database cost increase from one AI-generated admin dashboard performing per-row queries instead of an eager-loaded join."
+    },
+    "fan_out": {
+      "classification": "LINEAR with high multiplier, or QUADRATIC+ if nested",
+      "formula": "1 trigger event -> M downstream calls (DB writes + serverless invocations + third-party API calls). Cost multiplies by the number of downstream systems touched per event.",
+      "cost_formula": "total_cost = event_count * sum(downstream_call_costs)",
+      "scale_sensitivity": "Cost scales with event volume, not data volume — a webhook or queue consumer processing spikes in traffic fans out proportionally.",
+      "documented_case": "Single user action triggering cascading database queries, multiple serverless function invocations, and a batch of third-party API requests simultaneously — the 'accidental fan-out' pattern."
+    },
+    "retry_loop_unbounded": {
+      "classification": "RUNAWAY",
+      "formula": "No maximum attempt count. Cost is theoretically unbounded — limited only by the failing dependency's own uptime or a hard timeout elsewhere in the stack.",
+      "cost_formula": "total_cost = retry_attempts_until_manual_intervention * (compute_cost_per_attempt + any_paid_api_cost_per_attempt)",
+      "scale_sensitivity": "Not scale-sensitive in the traditional sense — a single triggering failure can produce unbounded cost regardless of overall traffic level.",
+      "documented_case": "Agentic workflows and serverless retry logic with no maximum attempt cap have been documented to silently burn through compute and token budgets before anyone notices, particularly in high-volume engineering teams running agent loops."
+    },
+    "unbounded_storage": {
+      "classification": "LINEAR (grows with usage) but often unbounded in practice due to no retention policy",
+      "formula": "Storage cost accumulates monotonically with no ceiling if every prompt, output, or attachment is retained indefinitely with no lifecycle policy.",
+      "cost_formula": "total_cost = cumulative_gb_stored * object_storage_gb_month.mid (recurring every month, compounding)",
+      "scale_sensitivity": "Low impact in month one. Becomes a material, permanently recurring line item within 6-12 months at typical SaaS usage growth rates.",
+      "documented_case": "AI infrastructure scaffolding defaulting to unbounded storage models — saving every user prompt, AI output, and attachment indefinitely with no expiry."
+    },
+    "lazy_autoscaling": {
+      "classification": "SUPRALINEAR to RUNAWAY depending on configuration",
+      "formula": "No maximum instance/concurrency cap set. Under a traffic spike or retry storm, autoscaling reacts by scaling out with no ceiling, multiplying compute cost by the number of instances spun up.",
+      "cost_formula": "total_cost = peak_concurrent_instances * container_vcpu_hour.mid * duration_hours",
+      "scale_sensitivity": "Dormant risk until the first real traffic spike or cascading retry storm, at which point cost can jump by an order of magnitude within minutes.",
+      "documented_case": "Lazy auto-scaling policies with no upper bound compounding with retry storms or fan-out bugs to produce combinatorial cost multiplication during incidents."
+    },
+    "missing_cache": {
+      "classification": "LINEAR with avoidable multiplier",
+      "formula": "An expensive computation or query (JOIN, aggregation, LLM call) is repeated identically on every request instead of cached, multiplying cost by request volume for work that produces the same result each time.",
+      "cost_formula": "total_cost = request_count * expensive_operation_cost, versus cached_cost = unique_result_count * expensive_operation_cost + (request_count * cache_read_cost)",
+      "scale_sensitivity": "Cost gap between cached and uncached widens directly with traffic — the highest-traffic endpoints are exactly the ones where this matters most and is most often missed.",
+      "documented_case": "Complex JOIN queries and repeated LLM calls on GET endpoints with no caching layer, common in dashboards and AI feature endpoints."
+    },
+    "llm_agent_loop_unbounded": {
+      "classification": "RUNAWAY",
+      "formula": "An agentic loop (tool-calling, self-correction, multi-step reasoning) with no maximum iteration count or token budget cap. Each iteration consumes input + output tokens.",
+      "cost_formula": "total_cost = iterations_until_stopped * (avg_input_tokens/1000 * input_rate + avg_output_tokens/1000 * output_rate)",
+      "scale_sensitivity": "Unbounded per-invocation. A single stuck agent loop can consume more budget than an entire day of normal traffic.",
+      "documented_case": "Agentic coding workflows and autonomous agent loops carry compounding costs of LLM API calls and container runtime compute that can quickly add up for high-volume teams if left unchecked."
+    },
+    "per_item_paid_api_call": {
+      "classification": "LINEAR with high per-unit cost, effectively SUPRALINEAR at business scale",
+      "formula": "A paid third-party API (enrichment, SMS, geocoding, payment lookup) is called once per item in a loop instead of using the provider's batch endpoint.",
+      "cost_formula": "total_cost = item_count * third_party_api.generic_paid_api_call.mid",
+      "scale_sensitivity": "Directly proportional to business growth — this is a pattern that gets more expensive exactly as the product succeeds.",
+      "documented_case": "Per-record enrichment or lookup calls inside loops instead of batch API usage, common when integration code is generated to handle one record at a time."
+    }
+  },
+
+  "complexity_classification": {
+    "CONSTANT":    { "notation": "O(1), O(log n)",          "color": "green",  "gate": "PASS" },
+    "LINEAR":      { "notation": "O(n)",                     "color": "yellow", "gate": "PASS_WITH_NOTE" },
+    "SUPRALINEAR": { "notation": "O(n log n), high-multiplier O(n)", "color": "orange", "gate": "WARN" },
+    "QUADRATIC_PLUS": { "notation": "O(n²) or worse, O(n×m) cross-product", "color": "red", "gate": "BLOCK" },
+    "RUNAWAY":     { "notation": "Unbounded — no cap on retries, storage, or concurrency", "color": "black", "gate": "BLOCK_REGARDLESS_OF_SCALE" }
+  },
+
+  "documented_case_studies": [
+    {
+      "case": "AI-generated admin dashboard",
+      "pattern": "n1_query",
+      "impact": "$12,000/month increase in database costs from per-row queries on a list view instead of an eager-loaded join"
+    },
+    {
+      "case": "Industry-wide unoptimized AI code at production scale",
+      "pattern": "multiple",
+      "impact": "Up to 400% inflation of cloud infrastructure bills; gross margins compressed from ~80% down to 50-60%"
+    },
+    {
+      "case": "The '$500 Query'",
+      "pattern": "n1_query / missing_pagination",
+      "impact": "A single lazy, unoptimized commit can add hundreds of dollars per day to a cloud bill without producing any visible error"
+    },
+    {
+      "case": "Agentic workflows and serverless retry logic",
+      "pattern": "retry_loop_unbounded / llm_agent_loop_unbounded",
+      "impact": "Silently burns through compute and LLM token budgets before anyone notices, particularly at high engineering-team volume"
+    }
+  ],
+
+  "blocking_thresholds": {
+    "rule_1": "Any finding classified RUNAWAY blocks the PR gate, at any current traffic level.",
+    "rule_2": "Any finding classified QUADRATIC_PLUS blocks the PR gate.",
+    "rule_3": "A SUPRALINEAR finding on an endpoint already handling more than 1,000 requests/day escalates to WARN with a required remediation date, not an open-ended note.",
+    "rule_4": "A LINEAR finding involving a paid third-party API or LLM call per item always gets a dollar projection at 10x and 100x scale, even if currently cheap, because this category scales with business success."
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "name": "sowadalmughni",
+  "owner": {
+    "name": "Md. Sowad Al-Mughni",
+    "email": "sowad.al.mughni@gmail.com",
+    "url": "https://www.kitalonlabs.com"
+  },
+  "plugins": [
+    {
+      "name": "finops-guardian",
+      "source": "./",
+      "description": "Detects infrastructure-expensive code patterns before they reach production and projects the actual dollar cost at scale."
+    }
+  ]
+}
