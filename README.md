@@ -117,6 +117,22 @@ A RUNAWAY finding is not a growth-rate problem — it is a missing hard cap. A s
 
 ---
 
+## Suppressing a Finding
+
+Some patterns are intentional — a health-check poller that retries forever by design, bounded externally by a liveness probe timeout, is not a bug. Add a comment containing `finops-guardian-ignore` on the flagged line or the line above it:
+
+```typescript
+// finops-guardian-ignore: intentional unbounded poll, bounded externally
+// by the container orchestrator's liveness probe timeout (ADR-014)
+while (true) {
+  ...
+}
+```
+
+Suppressions are counted and reported, not silent — `⚪ SUPPRESSED` in the text summary, `suppressed_count` in JSON output — so a suppressed finding still shows up as a decision made, not a gap in coverage.
+
+---
+
 ## Shift-Left FinOps: CI Gate
 
 Cost is evaluated before merge, exactly like a failed test — not discovered on next month's invoice. `skills/finops-guardian/templates/ci-cost-gate.md` includes ready-to-use GitHub Actions, GitLab CI, and pre-commit hook configurations that run the scanner on every PR and block merge on any RUNAWAY or QUADRATIC+ finding.

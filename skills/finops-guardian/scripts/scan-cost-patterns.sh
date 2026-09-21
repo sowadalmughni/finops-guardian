@@ -43,6 +43,7 @@ RUNAWAY_COUNT=0
 QUADRATIC_COUNT=0
 SUPRALINEAR_COUNT=0
 LINEAR_COUNT=0
+SUPPRESSED_COUNT=0
 declare -a JSON_FINDINGS=()
 
 QUIET=false
@@ -71,6 +72,20 @@ log_finding() {
   local line="$4"
   local detail="$5"
   local icon="🟢"
+
+  # Suppression: a comment containing "finops-guardian-ignore" on the
+  # flagged line or the line immediately above it silences this specific
+  # finding. Auditable, not silent — it still counts toward SUPPRESSED_COUNT
+  # and requires an actual comment in the source, so it can't be used to
+  # quietly erase evidence of the decision the way deleting the finding by
+  # hand or `commit --no-verify` would.
+  local suppress_window
+  suppress_window=$(sed -n "$((line > 1 ? line - 1 : 1)),${line}p" "$file" 2>/dev/null)
+  if echo "$suppress_window" | grep -qF "finops-guardian-ignore"; then
+    SUPPRESSED_COUNT=$((SUPPRESSED_COUNT + 1))
+    [ "$QUIET" = false ] && echo "  ⚪ SUPPRESSED — $pattern ($file:$line, finops-guardian-ignore)"
+    return
+  fi
 
   case "$classification" in
     RUNAWAY)        RUNAWAY_COUNT=$((RUNAWAY_COUNT + 1)); icon="⚫" ;;
@@ -123,7 +138,10 @@ for file in "${SCAN_FILES[@]}"; do
     [ -z "$linenum" ] && continue
     context=$(sed -n "${linenum},$((linenum + 5))p" "$file" 2>/dev/null)
     if echo "$context" | grep -qP "await.*(find|query|select|prisma\.|supabase\.|db\.)"; then
-      preceding=$(sed -n "1,${linenum}p" "$file" 2>/dev/null | tail -15)
+      # Exclude the triggering .map(async line itself from the lookback —
+      # it always contains ".map(", which is exactly what this check searches
+      # for, so including it made this always match regardless of real nesting.
+      preceding=$(sed -n "1,$((linenum - 1))p" "$file" 2>/dev/null | tail -15)
       if echo "$preceding" | grep -qP "for\s*\(|\.map\(|\.forEach\("; then
         log_finding "QUADRATIC_PLUS" "N+1 query nested inside another loop" "$file" "$linenum" \
           "Nested N+1 pattern — cost grows O(n^2). See reference/cost-pattern-playbook.md section Pattern 1"
@@ -310,8 +328,8 @@ if [ "$FORMAT" = "json" ]; then
   if [ "${#JSON_FINDINGS[@]}" -gt 0 ]; then
     findings_joined=$(IFS=,; echo "${JSON_FINDINGS[*]}")
   fi
-  printf '{"runaway_count":%d,"quadratic_count":%d,"supralinear_count":%d,"linear_count":%d,"findings":[%s]}\n' \
-    "$RUNAWAY_COUNT" "$QUADRATIC_COUNT" "$SUPRALINEAR_COUNT" "$LINEAR_COUNT" "$findings_joined"
+  printf '{"runaway_count":%d,"quadratic_count":%d,"supralinear_count":%d,"linear_count":%d,"suppressed_count":%d,"findings":[%s]}\n' \
+    "$RUNAWAY_COUNT" "$QUADRATIC_COUNT" "$SUPRALINEAR_COUNT" "$LINEAR_COUNT" "$SUPPRESSED_COUNT" "$findings_joined"
 fi
 
 if [ "$QUIET" = false ]; then
@@ -329,6 +347,7 @@ if [ "$QUIET" = false ]; then
   echo "  🔴 QUADRATIC+:   $QUADRATIC_COUNT"
   echo "  🟠 SUPRALINEAR:  $SUPRALINEAR_COUNT"
   echo "  🟡 LINEAR:       $LINEAR_COUNT"
+  echo "  ⚪ SUPPRESSED:   $SUPPRESSED_COUNT"
   echo ""
   echo "  NEXT: Project dollar cost with scale assumptions:"
   echo "    → bash scripts/estimate-impact.sh --pattern n1_query --records N --requests-per-day N"

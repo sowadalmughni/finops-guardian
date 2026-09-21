@@ -16,7 +16,7 @@ description: |
   the exact rewritten code that flattens the cost curve.
 license: MIT
 metadata:
-  version: "1.0.0"
+  version: "1.1.0"
   author: "Md. Sowad Al-Mughni"
   email: "sowad.al.mughni@gmail.com"
   company: "Kitalon Labs"
@@ -114,6 +114,20 @@ Fill `./templates/cost-impact-report.md`. Lead with the verdict (PASS / WARN / B
 5. **State scale assumptions explicitly and let the user correct them.** If traffic or record count is unknown, use a clearly labeled default and say so, rather than presenting an assumed number as fact.
 
 6. **No fixes without a cost curve before and after.** A rewrite is only complete when the report shows the classification and dollar estimate moving from the problem state to the fixed state.
+
+## Suppressing a Finding
+
+A pattern can be genuinely intentional — a health-check poller that retries forever by design, bounded externally by a liveness probe timeout, is not a bug. To suppress a specific finding, add a comment containing `finops-guardian-ignore` on the flagged line or the line immediately above it, with the reason:
+
+```typescript
+// finops-guardian-ignore: intentional unbounded poll, bounded externally
+// by the container orchestrator's liveness probe timeout (ADR-014)
+while (true) {
+  ...
+}
+```
+
+This is deliberately not silent: `scan-cost-patterns.sh` still counts and reports every suppression (⚪ SUPPRESSED in the summary, `suppressed_count` in JSON output). Suppressing a finding requires writing a comment that will sit in the diff for reviewers to see — it cannot be used to quietly erase a finding the way deleting it by hand or `git commit --no-verify` would.
 
 ## Reference Files
 

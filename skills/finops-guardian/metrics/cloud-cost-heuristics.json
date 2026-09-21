@@ -5,7 +5,9 @@
     "author": "Md. Sowad Al-Mughni",
     "company": "Kitalon Labs",
     "website": "https://www.kitalonlabs.com",
-    "homepage": "https://github.com/sowadalmughni/finops-guardian"
+    "homepage": "https://github.com/sowadalmughni/finops-guardian",
+    "last_reviewed": "2026-09-21",
+    "review_cadence": "Unit costs, especially llm_api, move fast — re-verify against current provider pricing at least quarterly."
   },
 
   "unit_costs": {

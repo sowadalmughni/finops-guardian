@@ -38,6 +38,17 @@ check() {
   fi
 }
 
+check_absent() {
+  local label="$1" haystack="$2" needle="$3"
+  if printf '%s\n' "$haystack" | grep -qF "$needle"; then
+    echo "  ✗ FAIL — $label (should NOT contain: \"$needle\")"
+    FAIL=$((FAIL + 1))
+  else
+    echo "  ✓ PASS — $label"
+    PASS=$((PASS + 1))
+  fi
+}
+
 echo "Running scan-cost-patterns.sh against planted-issue fixtures..."
 echo ""
 RESULTS=$(bash "$SCRIPTS_DIR/scan-cost-patterns.sh" "$WORKDIR" --format json)
@@ -63,6 +74,14 @@ check "Pattern 7 — classified RUNAWAY"                        "$RESULTS" '"cla
 
 check "Pattern 8 (per-item paid API call) — finding raised"  "$RESULTS" 'Per-item paid third-party API call inside loop'
 check "Pattern 8 — correct file flagged"                     "$RESULTS" 'enrichment.service.ts'
+
+check "Pattern 1 (.map+await, not nested) — classified LINEAR"       "$RESULTS" '"classification":"LINEAR","pattern":"N+1 query (.map+await)"'
+check "Pattern 1 (.map+await, not nested) — correct file flagged"    "$RESULTS" 'comments.service.ts'
+
+check "Pattern 1 (.map+await, genuinely nested) — classified QUADRATIC_PLUS" "$RESULTS" '"classification":"QUADRATIC_PLUS","pattern":"N+1 query nested inside another loop"'
+check "Pattern 1 (.map+await, genuinely nested) — correct file flagged"      "$RESULTS" 'groups.service.ts'
+
+check_absent "Suppressed finding does not appear in output" "$RESULTS" 'health-check-poller.ts'
 
 echo ""
 echo "─────────────────────────────────────────────"

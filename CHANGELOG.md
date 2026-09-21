@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.1.0] — 2026-09-21
+
+### Fixed
+
+- `scripts/scan-cost-patterns.sh` — The N+1 nested-loop check (`.map(async)` branch) looked back over the 15 lines up to and *including* the line that triggered the match. Since that line always contains `.map(` — one of the things the check searches for — every finding from this branch self-matched and was classified QUADRATIC_PLUS regardless of whether it was actually nested inside another loop. Fixed by excluding the triggering line from the lookback window; verified with new fixtures covering both a genuinely-nested case (still QUADRATIC_PLUS) and a non-nested case (now correctly LINEAR).
+
+### Added
+
+- Suppression mechanism: a comment containing `finops-guardian-ignore` on the flagged line or the line above it silences that specific finding. Auditable, not silent — suppressions are counted and reported (⚪ SUPPRESSED in the text summary, `suppressed_count` in JSON output) rather than disappearing without a trace.
+- `metrics/cloud-cost-heuristics.json` — `_meta.last_reviewed` and `_meta.review_cadence` fields, since unit costs (especially `llm_api`) drift and previously had no signal indicating when they needed re-verification.
+- Three new eval fixtures (`comments.service.ts`, `groups.service.ts`, `health-check-poller.ts`) and matching assertions proving the classification fix and the suppression mechanism both work as intended, not just as documented.
+
 ## [1.0.0] — 2026-09-19
 
 ### Added
